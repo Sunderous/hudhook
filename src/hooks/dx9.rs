@@ -351,7 +351,7 @@ unsafe fn get_dx9_present_addr() -> (Dx9EndSceneFn, Dx9PresentFn, Dx9ResetFn) {
         HMENU(0),
         hinstance,
         null(),
-    )
+    );
 
     let d9 = Direct3DCreate9(D3D_SDK_VERSION).unwrap();
 
