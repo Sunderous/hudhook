@@ -199,9 +199,9 @@ pub mod lifecycle {
                 hooks.unhook();
             }
 
-            if let Some(module) = global_state::MODULE.take() {
-                FreeLibraryAndExitThread(module, 0);
-            }
+//             if let Some(module) = global_state::MODULE.take() {
+//                 FreeLibraryAndExitThread(module, 0);
+//             }
         });
     }
 
