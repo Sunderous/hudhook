@@ -383,10 +383,11 @@ unsafe fn get_dx9_present_addr() -> (Dx9EndSceneFn, Dx9PresentFn, Dx9ResetFn) {
     let reset_ptr = device.vtable().Reset;
 
     DestroyWindow(hwnd);
+    UnregisterClassA(CLASS_NAME, hinstance);
+    
     (
         std::mem::transmute(end_scene_ptr),
         std::mem::transmute(present_ptr),
         std::mem::transmute(reset_ptr),
     )
-    UnregisterClassA(CLASS_NAME, hinstance);
 }
