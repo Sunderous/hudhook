@@ -189,7 +189,6 @@ pub mod lifecycle {
     use std::thread;
 
     use windows::Win32::System::LibraryLoader::FreeLibraryAndExitThread;
-    use windows::Win32::System::LibraryLoader::FreeLibrary;
 
     /// Disable hooks and eject the DLL.
     pub fn eject() {
@@ -201,8 +200,7 @@ pub mod lifecycle {
             }
 
             if let Some(module) = global_state::MODULE.take() {
-                FreeLibraryAndExitThread(module, 0);
-                //FreeLibrary(module);
+                FreeLibraryAndExitThread(module, 1);
             }
         });
     }
