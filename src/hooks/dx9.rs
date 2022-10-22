@@ -22,7 +22,7 @@ use windows::Win32::UI::WindowsAndMessaging::SetWindowLongA;
 use windows::Win32::UI::WindowsAndMessaging::SetWindowLongPtrA;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExA, DefWindowProcA, DefWindowProcW, DestroyWindow, GetCursorPos,
-    GetForegroundWindow, IsChild, RegisterClassA, CS_HREDRAW, CS_OWNDC, CS_VREDRAW, GWLP_WNDPROC,
+    GetForegroundWindow, IsChild, RegisterClassA, UnregisterClassA, CS_HREDRAW, CS_OWNDC, CS_VREDRAW, GWLP_WNDPROC,
     HCURSOR, HICON, HMENU, WINDOW_EX_STYLE, WNDCLASSA, WS_OVERLAPPEDWINDOW, WS_VISIBLE,
 };
 
@@ -310,8 +310,9 @@ impl Hooks for ImguiDX9Hooks {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Function address finders
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-
-unsafe fn create_dummy_window() -> HWND {
+unsafe fn get_dx9_present_addr() -> (Dx9EndSceneFn, Dx9PresentFn, Dx9ResetFn) {
+    const CLASS_NAME: PCSTR = PCSTR("HUDHOOK_DUMMY\0".as_ptr());
+    //let hwnd = create_dummy_window();
     unsafe extern "system" fn def_window_proc(
         hwnd: HWND,
         msg: u32,
@@ -326,7 +327,7 @@ unsafe fn create_dummy_window() -> HWND {
         style: CS_OWNDC | CS_HREDRAW | CS_VREDRAW,
         lpfnWndProc: Some(def_window_proc),
         hInstance: hinstance,
-        lpszClassName: PCSTR("HUDHOOK_DUMMY\0".as_ptr()),
+        lpszClassName: CLASS_NAME,
         cbClsExtra: 0,
         cbWndExtra: 0,
         hIcon: HICON(0),
@@ -337,10 +338,10 @@ unsafe fn create_dummy_window() -> HWND {
 
     RegisterClassA(&wnd_class);
 
-    CreateWindowExA(
+    let hwnd = CreateWindowExA(
         WINDOW_EX_STYLE(0),
-        PCSTR("HUDHOOK_DUMMY\0".as_ptr()),
-        PCSTR("HUDHOOK_DUMMY\0".as_ptr()),
+        CLASS_NAME,
+        CLASS_NAME,
         WS_OVERLAPPEDWINDOW | WS_VISIBLE,
         0,
         0,
@@ -351,10 +352,6 @@ unsafe fn create_dummy_window() -> HWND {
         hinstance,
         null(),
     )
-}
-
-unsafe fn get_dx9_present_addr() -> (Dx9EndSceneFn, Dx9PresentFn, Dx9ResetFn) {
-    let hwnd = create_dummy_window();
 
     let d9 = Direct3DCreate9(D3D_SDK_VERSION).unwrap();
 
@@ -391,4 +388,5 @@ unsafe fn get_dx9_present_addr() -> (Dx9EndSceneFn, Dx9PresentFn, Dx9ResetFn) {
         std::mem::transmute(present_ptr),
         std::mem::transmute(reset_ptr),
     )
+    UnregisterClassA(CLASS_NAME, hinstance);
 }
