@@ -201,8 +201,8 @@ pub mod lifecycle {
             }
 
             if let Some(module) = global_state::MODULE.take() {
-                //FreeLibraryAndExitThread(module, 0);
-                FreeLibrary(module);
+                FreeLibraryAndExitThread(module, 0);
+                //FreeLibrary(module);
             }
         });
     }
