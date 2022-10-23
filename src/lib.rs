@@ -186,7 +186,7 @@ pub mod utils {
 /// [`eject`]: lifecycle::eject
 pub mod lifecycle {
 
-    use std::thread;
+    use std::{thread, time::Duration};
 
     use windows::Win32::System::LibraryLoader::FreeLibraryAndExitThread;
 
@@ -198,6 +198,8 @@ pub mod lifecycle {
             if let Some(mut hooks) = global_state::HOOKS.take() {
                 hooks.unhook();
             }
+            
+            thread::sleep(Duration::from_millis(1000));
                         
             if let Some(module) = global_state::MODULE.take() {
                 FreeLibraryAndExitThread(module, 0);
