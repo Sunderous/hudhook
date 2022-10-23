@@ -30,39 +30,39 @@ use crate::hooks::common::{imgui_wnd_proc_impl, ImguiWindowsEventHandler};
 use crate::hooks::{Hooks, ImguiRenderLoop, ImguiRenderLoopFlags};
 use crate::renderers::imgui_dx9;
 
-unsafe fn draw(this: &IDirect3DDevice9) {
-    let mut imgui_renderer = IMGUI_RENDERER
-        .get_or_insert_with(|| {
-            let mut context = imgui::Context::create();
-            context.set_ini_filename(None);
-            IMGUI_RENDER_LOOP.get_mut().unwrap().initialize(&mut context);
-            let renderer = imgui_dx9::Renderer::new(&mut context, this.clone()).unwrap();
+// unsafe fn draw(this: &IDirect3DDevice9) {
+//     let mut imgui_renderer = IMGUI_RENDERER
+//         .get_or_insert_with(|| {
+//             let mut context = imgui::Context::create();
+//             context.set_ini_filename(None);
+//             IMGUI_RENDER_LOOP.get_mut().unwrap().initialize(&mut context);
+//             let renderer = imgui_dx9::Renderer::new(&mut context, this.clone()).unwrap();
 
-            #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
-            let wnd_proc = std::mem::transmute::<_, WndProcType>(SetWindowLongPtrA(
-                renderer.get_hwnd(),
-                GWLP_WNDPROC,
-                imgui_wnd_proc as usize as isize,
-            ));
+//             #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
+//             let wnd_proc = std::mem::transmute::<_, WndProcType>(SetWindowLongPtrA(
+//                 renderer.get_hwnd(),
+//                 GWLP_WNDPROC,
+//                 imgui_wnd_proc as usize as isize,
+//             ));
 
-            #[cfg(target_arch = "x86")]
-            let wnd_proc = std::mem::transmute::<_, WndProcType>(SetWindowLongA(
-                renderer.get_hwnd(),
-                GWLP_WNDPROC,
-                imgui_wnd_proc as usize as i32,
-            ));
+//             #[cfg(target_arch = "x86")]
+//             let wnd_proc = std::mem::transmute::<_, WndProcType>(SetWindowLongA(
+//                 renderer.get_hwnd(),
+//                 GWLP_WNDPROC,
+//                 imgui_wnd_proc as usize as i32,
+//             ));
 
-            Mutex::new(Box::new(ImguiRenderer {
-                ctx: context,
-                renderer,
-                wnd_proc,
-                flags: ImguiRenderLoopFlags { focused: false },
-            }))
-        })
-        .lock();
+//             Mutex::new(Box::new(ImguiRenderer {
+//                 ctx: context,
+//                 renderer,
+//                 wnd_proc,
+//                 flags: ImguiRenderLoopFlags { focused: false },
+//             }))
+//         })
+//         .lock();
 
-    imgui_renderer.render();
-}
+//     imgui_renderer.render();
+// }
 
 type Dx9EndSceneFn = unsafe extern "system" fn(this: IDirect3DDevice9) -> HRESULT;
 
@@ -90,7 +90,7 @@ unsafe extern "system" fn imgui_dx9_reset_impl(
         (*present_params).BackBufferHeight
     );
 
-    IMGUI_RENDERER = None;
+    IMGUI_RENDERER = OnceCell::new();
 
     let (_, _, trampoline_reset) =
         TRAMPOLINE.get().expect("IDirect3DDevice9::Reset trampoline uninitialized");
@@ -126,24 +126,23 @@ unsafe extern "system" fn imgui_wnd_proc(
     WPARAM(wparam): WPARAM,
     LPARAM(lparam): LPARAM,
 ) -> LRESULT {
-    if IMGUI_RENDERER.is_some() {
-        match IMGUI_RENDERER.as_mut().unwrap().try_lock() {
-            Some(imgui_renderer) => imgui_wnd_proc_impl(
-                hwnd,
-                umsg,
-                WPARAM(wparam),
-                LPARAM(lparam),
-                imgui_renderer,
-                IMGUI_RENDER_LOOP.get().unwrap(),
-            ),
-            None => {
-                debug!("Could not lock in WndProc");
-                DefWindowProcW(hwnd, umsg, WPARAM(wparam), LPARAM(lparam))
-            },
-        }
-    } else {
-        debug!("WndProc called before hook was set");
-        DefWindowProcW(hwnd, umsg, WPARAM(wparam), LPARAM(lparam))
+    match IMGUI_RENDERER.get().map(Mutex::try_lock) {
+        Some(Some(imgui_renderer)) => imgui_wnd_proc_impl(
+            hwnd,
+            umsg,
+            WPARAM(wparam),
+            LPARAM(lparam),
+            imgui_renderer,
+            IMGUI_RENDER_LOOP.get().unwrap(),
+        ),
+        Some(None) => {
+            debug!("Could not lock in WndProc");
+            DefWindowProcW(hwnd, umsg, WPARAM(wparam), LPARAM(lparam))
+        },
+        None => {
+            debug!("WndProc called before hook was set");
+            DefWindowProcW(hwnd, umsg, WPARAM(wparam), LPARAM(lparam))
+        },
     }
 }
 
@@ -157,7 +156,13 @@ unsafe extern "system" fn imgui_dx9_present_impl(
     trace!("IDirect3DDevice9::Present invoked");
 
     this.BeginScene().unwrap();
-    draw(&this);
+    let mut renderer = IMGUI_RENDERER
+        .get_or_init(|| Mutex::new(Box::new(ImguiRenderer::new(this.clone()))))
+        .lock();
+
+    renderer.render();
+    drop(renderer);
+    //draw(&this);
     this.EndScene().unwrap();
 
     let (_, trampoline_present, _) =
@@ -167,7 +172,7 @@ unsafe extern "system" fn imgui_dx9_present_impl(
 }
 
 static mut IMGUI_RENDER_LOOP: OnceCell<Box<dyn ImguiRenderLoop + Send + Sync>> = OnceCell::new();
-static mut IMGUI_RENDERER: Option<Mutex<Box<ImguiRenderer>>> = None;
+static mut IMGUI_RENDERER: OnceCell<Mutex<Box<ImguiRenderer>>> = OnceCell::new();
 static TRAMPOLINE: OnceCell<(Dx9EndSceneFn, Dx9PresentFn, Dx9ResetFn)> = OnceCell::new();
 
 struct ImguiRenderer {
@@ -178,6 +183,46 @@ struct ImguiRenderer {
 }
 
 impl ImguiRenderer {
+    unsafe fn new(this: IDirect3DDevice9) -> Self {
+        trace!("Initializing imgui context");
+
+        let mut context = imgui::Context::create();
+        context.set_ini_filename(None);
+        IMGUI_RENDER_LOOP.get_mut().unwrap().initialize(&mut context);
+        let renderer = imgui_dx9::Renderer::new(&mut context, this.clone()).unwrap();
+
+        #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
+        let wnd_proc = std::mem::transmute::<_, WndProcType>(SetWindowLongPtrA(
+            renderer.get_hwnd(),
+            GWLP_WNDPROC,
+            imgui_wnd_proc as usize as isize,
+        ));
+
+        #[cfg(target_arch = "x86")]
+        let wnd_proc = std::mem::transmute::<_, WndProcType>(SetWindowLongA(
+            renderer.get_hwnd(),
+            GWLP_WNDPROC,
+            imgui_wnd_proc as usize as i32,
+        ));
+
+        // Mutex::new(Box::new(ImguiRenderer {
+        //     ctx: context,
+        //     renderer,
+        //     wnd_proc,
+        //     flags: ImguiRenderLoopFlags { focused: false },
+        // }));
+
+        trace!("Renderer initialized");
+        let mut renderer = ImguiRenderer { ctx: context,
+            renderer,
+            wnd_proc,
+            flags: ImguiRenderLoopFlags { focused: false } };
+
+        ImguiWindowsEventHandler::setup_io(&mut renderer);
+
+        renderer
+    }
+
     unsafe fn render(&mut self) {
         if let Some(rect) = self.renderer.get_window_rect() {
             let mut io = self.ctx.io_mut();
