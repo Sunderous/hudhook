@@ -206,9 +206,11 @@ pub mod lifecycle {
     }
     
     pub fn unhook() {
-        if let Some(mut hooks) = global_state::HOOKS.take() {
-            hooks.unhook();
-        }
+        thread::spawn(|| unsafe {
+            if let Some(mut hooks) = global_state::HOOKS.take() {
+                hooks.unhook();
+            }
+        });
     }
 
     /// Exposes functions that store and manipulate global state data.
