@@ -199,7 +199,7 @@ pub mod lifecycle {
                 hooks.unhook();
             }
             
-            thread::sleep(Duration::from_millis(1000));
+            //thread::sleep(Duration::from_millis(1000));
                         
             if let Some(module) = global_state::MODULE.take() {
                 FreeLibraryAndExitThread(module, 0);
