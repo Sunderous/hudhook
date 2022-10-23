@@ -198,13 +198,17 @@ pub mod lifecycle {
             if let Some(mut hooks) = global_state::HOOKS.take() {
                 hooks.unhook();
             }
-            
-            thread::sleep(std::time::Duration::from_millis(100));
-            
+                        
             if let Some(module) = global_state::MODULE.take() {
                 FreeLibraryAndExitThread(module, 0);
             }
         });
+    }
+    
+    pub fn unhook() {
+        if let Some(mut hooks) = global_state::HOOKS.take() {
+            hooks.unhook();
+        }
     }
 
     /// Exposes functions that store and manipulate global state data.
