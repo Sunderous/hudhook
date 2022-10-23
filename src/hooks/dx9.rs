@@ -210,7 +210,9 @@ impl ImguiRenderer {
         self.renderer.render(draw_data).unwrap();
     }
 
-    unsafe fn cleanup(&mut self) {}
+    unsafe fn cleanup(&mut self) {
+        
+    }
 }
 
 impl ImguiWindowsEventHandler for ImguiRenderer {
