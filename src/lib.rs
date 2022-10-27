@@ -198,7 +198,9 @@ pub mod lifecycle {
             if let Some(mut hooks) = global_state::HOOKS.take() {
                 hooks.unhook();
             }
-                                    
+            
+            thread::sleep(Duration::from_millis(250));
+
             if let Some(module) = global_state::MODULE.take() {
                 FreeLibraryAndExitThread(module, 0);
             }
