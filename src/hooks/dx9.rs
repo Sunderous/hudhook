@@ -369,48 +369,6 @@ impl Hooks for ImguiDX9Hooks {
 // Function address finders
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 unsafe fn get_dx9_present_addr() -> (Dx9EndSceneFn, Dx9PresentFn, Dx9ResetFn) {
-    const CLASS_NAME: PCSTR = PCSTR("HUDHOOK_DUMMY\0".as_ptr());
-    //let hwnd = create_dummy_window();
-    unsafe extern "system" fn def_window_proc(
-        hwnd: HWND,
-        msg: u32,
-        wparam: WPARAM,
-        lparam: LPARAM,
-    ) -> LRESULT {
-        DefWindowProcA(hwnd, msg, wparam, lparam)
-    }
-
-    let hinstance = GetModuleHandleA(None).unwrap();
-    let wnd_class = WNDCLASSA {
-        style: CS_OWNDC | CS_HREDRAW | CS_VREDRAW,
-        lpfnWndProc: Some(def_window_proc),
-        hInstance: hinstance,
-        lpszClassName: CLASS_NAME,
-        cbClsExtra: 0,
-        cbWndExtra: 0,
-        hIcon: HICON(0),
-        hCursor: HCURSOR(0),
-        hbrBackground: HBRUSH(0),
-        lpszMenuName: PCSTR(null()),
-    };
-
-    RegisterClassA(&wnd_class);
-
-    let hwnd = CreateWindowExA(
-        WINDOW_EX_STYLE(0),
-        CLASS_NAME,
-        CLASS_NAME,
-        WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-        0,
-        0,
-        100,
-        100,
-        HWND(0),
-        HMENU(0),
-        hinstance,
-        null(),
-    );
-
     let d9 = Direct3DCreate9(D3D_SDK_VERSION).unwrap();
 
     let mut d3d_display_mode =
@@ -428,7 +386,7 @@ unsafe fn get_dx9_present_addr() -> (Dx9EndSceneFn, Dx9PresentFn, Dx9ResetFn) {
     d9.CreateDevice(
         D3DADAPTER_DEFAULT,
         D3DDEVTYPE_HAL,
-        hwnd,
+        GetDesktopWindow(),
         D3DCREATE_SOFTWARE_VERTEXPROCESSING as u32,
         &mut present_params,
         &mut device,
@@ -440,9 +398,6 @@ unsafe fn get_dx9_present_addr() -> (Dx9EndSceneFn, Dx9PresentFn, Dx9ResetFn) {
     let present_ptr = device.vtable().Present;
     let reset_ptr = device.vtable().Reset;
 
-    DestroyWindow(hwnd);
-    UnregisterClassA(CLASS_NAME, hinstance);
-    
     (
         std::mem::transmute(end_scene_ptr),
         std::mem::transmute(present_ptr),
