@@ -1,29 +1,24 @@
-use std::ptr::null;
-
 use detour::RawDetour;
 use imgui::Context;
 use log::{debug, error, trace};
 use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
-use windows::core::{Interface, HRESULT, PCSTR};
+use windows::core::{Interface, HRESULT};
 use windows::Win32::Foundation::{
     GetLastError, BOOL, HANDLE, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM,
 };
 use windows::Win32::Graphics::Direct3D9::{
-    Direct3DCreate9, IDirect3DDevice9, D3DADAPTER_DEFAULT, D3DBACKBUFFER_TYPE_MONO,
-    D3DCREATE_SOFTWARE_VERTEXPROCESSING, D3DDEVTYPE_HAL, D3DDISPLAYMODE, D3DFORMAT,
-    D3DPRESENT_PARAMETERS, D3DSURFACE_DESC, D3DSWAPEFFECT_DISCARD, D3DVIEWPORT9, D3D_SDK_VERSION,
+    Direct3DCreate9, IDirect3DDevice9, D3DADAPTER_DEFAULT, D3DCREATE_SOFTWARE_VERTEXPROCESSING,
+    D3DDEVTYPE_HAL, D3DDISPLAYMODE, D3DFORMAT, D3DPRESENT_PARAMETERS, D3DSWAPEFFECT_DISCARD,
+    D3D_SDK_VERSION,
 };
-use windows::Win32::Graphics::Gdi::{ScreenToClient, HBRUSH, RGNDATA};
-use windows::Win32::System::LibraryLoader::GetModuleHandleA;
+use windows::Win32::Graphics::Gdi::{ScreenToClient, RGNDATA};
 #[cfg(target_arch = "x86")]
 use windows::Win32::UI::WindowsAndMessaging::SetWindowLongA;
 #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 use windows::Win32::UI::WindowsAndMessaging::SetWindowLongPtrA;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExA, DefWindowProcA, DefWindowProcW, DestroyWindow, GetCursorPos,
-    GetForegroundWindow, IsChild, RegisterClassA, UnregisterClassA, CS_HREDRAW, CS_OWNDC, CS_VREDRAW, GWLP_WNDPROC,
-    HCURSOR, HICON, HMENU, WINDOW_EX_STYLE, WNDCLASSA, WS_OVERLAPPEDWINDOW, WS_VISIBLE,
+    DefWindowProcW, GetCursorPos, GetDesktopWindow, GetForegroundWindow, IsChild, GWLP_WNDPROC,
 };
 
 use crate::hooks::common::{imgui_wnd_proc_impl, ImguiWindowsEventHandler};
@@ -36,18 +31,19 @@ use crate::renderers::imgui_dx9;
 //             let mut context = imgui::Context::create();
 //             context.set_ini_filename(None);
 //             IMGUI_RENDER_LOOP.get_mut().unwrap().initialize(&mut context);
-//             let renderer = imgui_dx9::Renderer::new(&mut context, this.clone()).unwrap();
+//             let renderer = imgui_dx9::Renderer::new(&mut context,
+// this.clone()).unwrap();
 
 //             #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
-//             let wnd_proc = std::mem::transmute::<_, WndProcType>(SetWindowLongPtrA(
-//                 renderer.get_hwnd(),
+//             let wnd_proc = std::mem::transmute::<_,
+// WndProcType>(SetWindowLongPtrA(                 renderer.get_hwnd(),
 //                 GWLP_WNDPROC,
 //                 imgui_wnd_proc as usize as isize,
 //             ));
 
 //             #[cfg(target_arch = "x86")]
-//             let wnd_proc = std::mem::transmute::<_, WndProcType>(SetWindowLongA(
-//                 renderer.get_hwnd(),
+//             let wnd_proc = std::mem::transmute::<_,
+// WndProcType>(SetWindowLongA(                 renderer.get_hwnd(),
 //                 GWLP_WNDPROC,
 //                 imgui_wnd_proc as usize as i32,
 //             ));
@@ -93,12 +89,12 @@ type WndProcType =
 //     IMGUI_RENDERER = OnceCell::new();
 
 //     let (_, _, trampoline_reset) =
-//         TRAMPOLINE.get().expect("IDirect3DDevice9::Reset trampoline uninitialized");
-//     trampoline_reset(this, present_params)
+//         TRAMPOLINE.get().expect("IDirect3DDevice9::Reset trampoline
+// uninitialized");     trampoline_reset(this, present_params)
 // }
 
-// unsafe extern "system" fn imgui_dx9_end_scene_impl(this: IDirect3DDevice9) -> HRESULT {
-//     trace!("IDirect3DDevice9::EndScene invoked");
+// unsafe extern "system" fn imgui_dx9_end_scene_impl(this: IDirect3DDevice9) ->
+// HRESULT {     trace!("IDirect3DDevice9::EndScene invoked");
 
 //     let mut viewport = D3DVIEWPORT9 { ..core::mem::zeroed() };
 //     this.GetViewport(&mut viewport).unwrap();
@@ -106,16 +102,18 @@ type WndProcType =
 //     let mut render_target_desc = D3DSURFACE_DESC { ..core::mem::zeroed() };
 //     render_target_surface.GetDesc(&mut render_target_desc).unwrap();
 
-//     let backbuffer_surface = this.GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO).unwrap();
-//     let mut backbuffer_desc = D3DSURFACE_DESC { ..core::mem::zeroed() };
-//     backbuffer_surface.GetDesc(&mut backbuffer_desc).unwrap();
+//     let backbuffer_surface = this.GetBackBuffer(0, 0,
+// D3DBACKBUFFER_TYPE_MONO).unwrap();     let mut backbuffer_desc =
+// D3DSURFACE_DESC { ..core::mem::zeroed() };     backbuffer_surface.GetDesc(&
+// mut backbuffer_desc).unwrap();
 
 //     trace!("Viewport: {:?}", viewport);
 //     trace!("Render target desc: {:?}", render_target_desc);
 //     trace!("Backbuffer desc: {:?}", backbuffer_desc);
 
 //     let (trampoline_end_scene, ..) =
-//         TRAMPOLINE.get().expect("IDirect3DDevice9::EndScene trampoline uninitialized");
+//         TRAMPOLINE.get().expect("IDirect3DDevice9::EndScene trampoline
+// uninitialized");
 
 //     trampoline_end_scene(this)
 // }
@@ -162,7 +160,7 @@ unsafe extern "system" fn imgui_dx9_present_impl(
 
     renderer.render();
     drop(renderer);
-    //draw(&this);
+    // draw(&this);
     this.EndScene().unwrap();
 
     let trampoline_present =
@@ -173,7 +171,8 @@ unsafe extern "system" fn imgui_dx9_present_impl(
 
 static mut IMGUI_RENDER_LOOP: OnceCell<Box<dyn ImguiRenderLoop + Send + Sync>> = OnceCell::new();
 static mut IMGUI_RENDERER: OnceCell<Mutex<Box<ImguiRenderer>>> = OnceCell::new();
-// static TRAMPOLINE: OnceCell<(Dx9EndSceneFn, Dx9PresentFn, Dx9ResetFn)> = OnceCell::new();
+// static TRAMPOLINE: OnceCell<(Dx9EndSceneFn, Dx9PresentFn, Dx9ResetFn)> =
+// OnceCell::new();
 static TRAMPOLINE: OnceCell<Dx9PresentFn> = OnceCell::new();
 
 struct ImguiRenderer {
@@ -214,10 +213,12 @@ impl ImguiRenderer {
         // }));
 
         trace!("Renderer initialized");
-        let mut renderer = ImguiRenderer { ctx: context,
+        let mut renderer = ImguiRenderer {
+            ctx: context,
             renderer,
             wnd_proc,
-            flags: ImguiRenderLoopFlags { focused: false } };
+            flags: ImguiRenderLoopFlags { focused: false },
+        };
 
         ImguiWindowsEventHandler::setup_io(&mut renderer);
 
@@ -253,7 +254,7 @@ impl ImguiRenderer {
 
         IMGUI_RENDER_LOOP.get_mut().unwrap().render(&mut ui, &self.flags);
         let draw_data = ui.render();
-        
+
         if let Err(e) = self.renderer.render(draw_data) {
             error!("ImGui renderer error: {:?}", e);
         }
@@ -295,9 +296,9 @@ unsafe impl Sync for ImguiRenderer {}
 /// Stores hook detours and implements the [`Hooks`] trait.
 pub struct ImguiDX9Hooks {
     #[allow(dead_code)]
-    //hook_dx9_end_scene: RawDetour,
+    // hook_dx9_end_scene: RawDetour,
     hook_dx9_present: RawDetour,
-    //hook_dx9_reset: RawDetour,
+    // hook_dx9_reset: RawDetour,
 }
 
 impl ImguiDX9Hooks {
@@ -323,15 +324,15 @@ impl ImguiDX9Hooks {
                 .expect("IDirect3DDevice9::Present hook");
 
         // let hook_dx9_reset =
-        //     RawDetour::new(dx9_reset_address as *const _, imgui_dx9_reset_impl as *const _)
-        //         .expect("IDirect3DDevice9::Reset hook");
+        //     RawDetour::new(dx9_reset_address as *const _, imgui_dx9_reset_impl as
+        // *const _)         .expect("IDirect3DDevice9::Reset hook");
 
         IMGUI_RENDER_LOOP.get_or_init(|| Box::new(t));
         TRAMPOLINE.get_or_init(|| {
             //(
-                //std::mem::transmute(hook_dx9_end_scene.trampoline()),
-                std::mem::transmute(hook_dx9_present.trampoline())
-                //std::mem::transmute(hook_dx9_reset.trampoline()),
+            // std::mem::transmute(hook_dx9_end_scene.trampoline()),
+            std::mem::transmute(hook_dx9_present.trampoline())
+            // std::mem::transmute(hook_dx9_reset.trampoline()),
             //)
         });
 
@@ -342,7 +343,8 @@ impl ImguiDX9Hooks {
 
 impl Hooks for ImguiDX9Hooks {
     unsafe fn hook(&self) {
-        // for hook in [&self.hook_dx9_end_scene, &self.hook_dx9_present, &self.hook_dx9_reset] {
+        // for hook in [&self.hook_dx9_end_scene, &self.hook_dx9_present,
+        // &self.hook_dx9_reset] {
         for hook in [&self.hook_dx9_present] {
             if let Err(e) = hook.enable() {
                 error!("Couldn't enable hook: {e}");
@@ -351,7 +353,8 @@ impl Hooks for ImguiDX9Hooks {
     }
 
     unsafe fn unhook(&mut self) {
-        // for hook in [&self.hook_dx9_end_scene, &self.hook_dx9_present, &self.hook_dx9_reset] {
+        // for hook in [&self.hook_dx9_end_scene, &self.hook_dx9_present,
+        // &self.hook_dx9_reset] {
         for hook in [&self.hook_dx9_present] {
             if let Err(e) = hook.disable() {
                 error!("Couldn't disable hook: {e}");
